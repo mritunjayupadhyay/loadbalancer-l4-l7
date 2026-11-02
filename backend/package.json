@@ -1,0 +1,19 @@
+{
+  "name": "load-balancing-lab-backend",
+  "version": "1.0.0",
+  "description": "A tiny Express app that we run several copies of, so a load balancer has something to balance.",
+  "main": "server.js",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "app1": "SERVER_NAME=app1 PORT=3001 node server.js",
+    "app2": "SERVER_NAME=app2 PORT=3002 node server.js",
+    "app3": "SERVER_NAME=app3 PORT=3003 node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}

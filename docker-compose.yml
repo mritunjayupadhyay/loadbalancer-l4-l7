@@ -1,0 +1,149 @@
+# =============================================================================
+# docker-compose.yml — starts the whole lab with one command:
+#
+#     docker compose up --build
+#
+# What gets started:
+#   app1, app2, app3            Express backends (same image, different name)
+#   tcp-echo-1, -2, -3          raw TCP echo servers (non-HTTP protocol)
+#   nginx                       the load balancer (both Layer 7 and Layer 4)
+#
+# All containers join one private network called "labnet". Inside it they find
+# each other by service name (nginx connects to "app1:3000").
+# =============================================================================
+
+# A YAML "anchor" (&backend) lets us write the shared settings once and reuse
+# them for app1/app2/app3 with "<<: *backend". Only the name/IP/port differ.
+x-backend: &backend
+  build: ./backend
+  # Do NOT restart automatically. When a student crashes a server with
+  # POST /crash, we WANT it to stay dead so the failover is visible.
+  # Bring it back by hand with:  docker compose start app1
+  restart: "no"
+
+x-tcp-echo: &tcp-echo
+  # No custom image needed: the echo server has zero dependencies, so we run
+  # the stock Node image and mount our code folder into it.
+  image: node:24-alpine
+  working_dir: /app
+  volumes:
+    - ./tcp-echo:/app:ro
+  command: ["node", "server.js"]
+  restart: "no"
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Express backends. Each listens on 3000 INSIDE its container. We also
+  # publish them on 3001/3002/3003 on your laptop so you can talk to one
+  # server directly (bypassing the load balancer) for comparison.
+  # ---------------------------------------------------------------------------
+  app1:
+    <<: *backend
+    container_name: lab-app1
+    environment:
+      SERVER_NAME: app1
+    ports: ["3001:3000"]
+    networks:
+      labnet:
+        ipv4_address: 10.10.10.11
+
+  app2:
+    <<: *backend
+    container_name: lab-app2
+    environment:
+      SERVER_NAME: app2
+    ports: ["3002:3000"]
+    networks:
+      labnet:
+        ipv4_address: 10.10.10.12
+
+  app3:
+    <<: *backend
+    container_name: lab-app3
+    environment:
+      SERVER_NAME: app3
+    ports: ["3003:3000"]
+    networks:
+      labnet:
+        ipv4_address: 10.10.10.13
+
+  # ---------------------------------------------------------------------------
+  # TCP echo servers (listen on 7000 inside the container).
+  # ---------------------------------------------------------------------------
+  tcp-echo-1:
+    <<: *tcp-echo
+    container_name: lab-tcp-echo-1
+    environment:
+      SERVER_NAME: tcp-echo-1
+    ports: ["7001:7000"]
+    networks:
+      labnet:
+        ipv4_address: 10.10.10.21
+
+  tcp-echo-2:
+    <<: *tcp-echo
+    container_name: lab-tcp-echo-2
+    environment:
+      SERVER_NAME: tcp-echo-2
+    ports: ["7002:7000"]
+    networks:
+      labnet:
+        ipv4_address: 10.10.10.22
+
+  tcp-echo-3:
+    <<: *tcp-echo
+    container_name: lab-tcp-echo-3
+    environment:
+      SERVER_NAME: tcp-echo-3
+    ports: ["7003:7000"]
+    networks:
+      labnet:
+        ipv4_address: 10.10.10.23
+
+  # ---------------------------------------------------------------------------
+  # nginx — the load balancer.
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.28-alpine
+    container_name: lab-nginx
+    # Mount our config files READ-ONLY (:ro) into the container. Edit them on
+    # your laptop, then reload nginx:  docker compose exec nginx nginx -s reload
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/l7-http.conf:/etc/nginx/lab/l7-http.conf:ro
+      - ./nginx/l4-stream.conf:/etc/nginx/lab/l4-stream.conf:ro
+    ports:
+      - "8080:8080"   # Layer 7 (HTTP)
+      - "9090:9090"   # Layer 4 -> Express, round robin
+      - "9091:9091"   # Layer 4 -> Express, least_conn
+      - "9092:9092"   # Layer 4 -> Express, hash consistent
+      - "9000:9000"   # Layer 4 -> tcp-echo (non-HTTP)
+    # Start the backends first. nginx looks up "app1", "tcp-echo-1", ... when
+    # it starts, and refuses to start if a name doesn't exist yet.
+    depends_on:
+      - app1
+      - app2
+      - app3
+      - tcp-echo-1
+      - tcp-echo-2
+      - tcp-echo-3
+    restart: "no"
+    networks:
+      labnet:
+        ipv4_address: 10.10.10.2
+
+# -----------------------------------------------------------------------------
+# A private network with a FIXED address range, and fixed IPs above.
+# Why fixed? Two reasons:
+#   1. nginx shows backends by IP (X-Upstream-Server: 10.10.10.11:3000).
+#      Fixed IPs mean you can memorise: .11 = app1, .12 = app2, .13 = app3.
+#   2. nginx looks up each backend's IP once, at startup. If a crashed
+#      container came back with a NEW IP, nginx would keep using the old one.
+#      Fixed IPs guarantee the server comes back at the same address.
+# -----------------------------------------------------------------------------
+networks:
+  labnet:
+    ipam:
+      config:
+        - subnet: 10.10.10.0/24
