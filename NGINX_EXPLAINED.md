@@ -169,7 +169,7 @@ together. Each `$variable` is filled in per request:
 | `$remote_addr` | `192.168.65.1` | IP of the client that connected to nginx |
 | `$request` | `GET /rr/ HTTP/1.1` | the request line |
 | `$status` | `200` | status nginx sent to the client |
-| `$upstream_addr` | `10.10.10.12:3000, 10.10.10.13:3000` | backend(s) tried. Several = a retry happened |
+| `$upstream_addr` | `10.10.10.12:4000, 10.10.10.13:4000` | backend(s) tried. Several = a retry happened |
 | `$upstream_status` | `504, 200` | what each backend attempt returned |
 | `$upstream_response_time` | `1.006, 0.003` | seconds each backend attempt took |
 
@@ -199,15 +199,15 @@ requests to that group.
 
 ```nginx
 upstream backend_rr {
-    server app1:3000 max_fails=1 fail_timeout=10s;
-    server app2:3000 max_fails=1 fail_timeout=10s;
-    server app3:3000 max_fails=1 fail_timeout=10s;
+    server app1:4000 max_fails=1 fail_timeout=10s;
+    server app2:4000 max_fails=1 fail_timeout=10s;
+    server app3:4000 max_fails=1 fail_timeout=10s;
 }
 ```
 
 - `upstream backend_rr { ... }`: a group called `backend_rr`.
-- `server app1:3000`: a member. `app1` is a hostname that Docker's internal DNS
-  turns into `10.10.10.11`; `3000` is the port the Express app listens on
+- `server app1:4000`: a member. `app1` is a hostname that Docker's internal DNS
+  turns into `10.10.10.11`; `4000` is the port the Express app listens on
   **inside** its container. nginx looks up the name **once, at startup** (and on
   reload).
 - No algorithm line, so **round robin** (the default).
@@ -220,9 +220,9 @@ upstream backend_rr {
 
 ```nginx
 upstream backend_weighted {
-    server app1:3000 weight=3;
-    server app2:3000;
-    server app3:3000;
+    server app1:4000 weight=3;
+    server app2:4000;
+    server app3:4000;
 }
 ```
 
@@ -234,7 +234,7 @@ nginx interleaves them smoothly (`app1 app2 app1 app3 app1`) instead of sending
 ```nginx
 upstream backend_least {
     least_conn;
-    server app1:3000;
+    server app1:4000;
     ...
 }
 ```
@@ -266,10 +266,10 @@ a server only remaps about 1/N of the keys. (Without `consistent`, nginx uses
 `hash % N` and almost every key moves when N changes.)
 
 ```nginx
-upstream api_pool    { server app1:3000; server app2:3000; }
-upstream static_pool { server app3:3000; }
-upstream stable_pool { server app1:3000; server app2:3000; }
-upstream beta_pool   { server app3:3000; }
+upstream api_pool    { server app1:4000; server app2:4000; }
+upstream static_pool { server app3:4000; }
+upstream stable_pool { server app1:4000; server app2:4000; }
+upstream beta_pool   { server app3:4000; }
 ```
 
 (Shown compressed here.) Plain round-robin groups used by the routing demos. A
@@ -496,7 +496,7 @@ module never parses the bytes, so it has no idea what a URL or header is.
 
 ```nginx
 upstream l4_http_rr {
-    server app1:3000 max_fails=1 fail_timeout=10s;
+    server app1:4000 max_fails=1 fail_timeout=10s;
     ...
 }
 ```
@@ -634,7 +634,7 @@ In this lab:
 including 404s. Asking app1 directly for what it *would* get without the slash:
 
 ```bash
-curl -s localhost:3001/rr/ | grep -E 'tag|pathReceived'
+curl -s localhost:4001/rr/ | grep -E 'tag|pathReceived'
 ```
 
 ```
@@ -740,7 +740,7 @@ docker compose exec nginx nginx -T
 | Same issue with `add_header` | `X-Upstream-Server` missing for one location | Same inheritance rule |
 | Trailing-slash mismatch in `proxy_pass` | Backend returns 404; `pathReceived` is wrong | See [Part 6](#part-6--the-proxy_pass-trailing-slash-gotcha) |
 | `location /rr/` but you requested `/rr` | Goes to `location /` instead | Request `/rr/`, or add `location = /rr { return 301 /rr/; }` |
-| Backend host doesn't resolve | `host not found in upstream "app2:3000"` | The container is stopped or misnamed. `docker compose start app2` |
+| Backend host doesn't resolve | `host not found in upstream "app2:4000"` | The container is stopped or misnamed. `docker compose start app2` |
 | `http://` in a stream `proxy_pass` | `invalid host in upstream "http://u"` | Stream uses `proxy_pass upstream_name;`, no scheme |
 | Two server blocks on the same port | Requests go to the "wrong" one | The first one listed is the **default server** for unknown hostnames; use `server_name` and/or `listen 8080 default_server;` |
 | Expecting active health checks | `health_check` → `unknown directive` | That's nginx Plus only. Open-source nginx does passive checks (`max_fails`/`fail_timeout`) |

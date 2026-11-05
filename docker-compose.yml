@@ -9,7 +9,7 @@
 #   nginx                       the load balancer (both Layer 7 and Layer 4)
 #
 # All containers join one private network called "labnet". Inside it they find
-# each other by service name (nginx connects to "app1:3000").
+# each other by service name (nginx connects to "app1:4000").
 # =============================================================================
 
 # A YAML "anchor" (&backend) lets us write the shared settings once and reuse
@@ -34,8 +34,8 @@ x-tcp-echo: &tcp-echo
 services:
 
   # ---------------------------------------------------------------------------
-  # Express backends. Each listens on 3000 INSIDE its container. We also
-  # publish them on 3001/3002/3003 on your laptop so you can talk to one
+  # Express backends. Each listens on 4000 INSIDE its container. We also
+  # publish them on 4001/4002/4003 on your laptop so you can talk to one
   # server directly (bypassing the load balancer) for comparison.
   # ---------------------------------------------------------------------------
   app1:
@@ -43,7 +43,7 @@ services:
     container_name: lab-app1
     environment:
       SERVER_NAME: app1
-    ports: ["3001:3000"]
+    ports: ["4001:4000"]
     networks:
       labnet:
         ipv4_address: 10.10.10.11
@@ -53,7 +53,7 @@ services:
     container_name: lab-app2
     environment:
       SERVER_NAME: app2
-    ports: ["3002:3000"]
+    ports: ["4002:4000"]
     networks:
       labnet:
         ipv4_address: 10.10.10.12
@@ -63,7 +63,7 @@ services:
     container_name: lab-app3
     environment:
       SERVER_NAME: app3
-    ports: ["3003:3000"]
+    ports: ["4003:4000"]
     networks:
       labnet:
         ipv4_address: 10.10.10.13
@@ -136,7 +136,7 @@ services:
 # -----------------------------------------------------------------------------
 # A private network with a FIXED address range, and fixed IPs above.
 # Why fixed? Two reasons:
-#   1. nginx shows backends by IP (X-Upstream-Server: 10.10.10.11:3000).
+#   1. nginx shows backends by IP (X-Upstream-Server: 10.10.10.11:4000).
 #      Fixed IPs mean you can memorise: .11 = app1, .12 = app2, .13 = app3.
 #   2. nginx looks up each backend's IP once, at startup. If a crashed
 #      container came back with a NEW IP, nginx would keep using the old one.

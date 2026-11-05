@@ -146,7 +146,9 @@ sequenceDiagram
 ```
 
 **What it can see:** source IP and port, destination IP and port, the protocol
-(TCP/UDP), and how many connections are open.
+(TCP/UDP), and how many connections it currently has open to each backend
+(it knows because it opened them itself: every client connection is paired with
+a second connection that the load balancer makes to the backend).
 
 **What it can't see:** URL paths, HTTP methods, headers, cookies, hostnames
 (except the TLS SNI, via a special trick), request boundaries. It cannot tell
@@ -187,7 +189,7 @@ sequenceDiagram
     Note over LB: Read method, path, headers.<br/>/api/ → api_pool → app2.<br/>Add X-Forwarded-For, X-Real-IP.
     LB->>B: GET /api/info<br/>X-Forwarded-For: 192.168.65.1
     B->>LB: 200 OK {...}
-    Note over LB: Add response header<br/>X-Upstream-Server: 10.10.10.12:3000
+    Note over LB: Add response header<br/>X-Upstream-Server: 10.10.10.12:4000
     LB->>C: 200 OK {...}
 ```
 
@@ -302,7 +304,7 @@ sequenceDiagram
     Note over N,A2: no answer within proxy_connect_timeout (1 s)<br/>→ mark app2 failed for 10 s
     N->>A3: retry same request (proxy_next_upstream)
     A3->>N: 200 OK
-    N->>C: 200 OK<br/>X-Upstream-Server: 10.10.10.12:3000, 10.10.10.13:3000
+    N->>C: 200 OK<br/>X-Upstream-Server: 10.10.10.12:4000, 10.10.10.13:4000
 ```
 
 ### Sticky sessions, and why stateless apps matter
@@ -360,9 +362,9 @@ flowchart LR
             L4H["<b>stream {}</b> — Layer 4<br/>:9090 round robin<br/>:9091 least_conn<br/>:9092 hash consistent"]
             L4E["<b>stream {}</b> — Layer 4<br/>:9000 round robin"]
         end
-        A1["🔴 app1 10.10.10.11:3000"]
-        A2["🟢 app2 10.10.10.12:3000"]
-        A3["🔵 app3 10.10.10.13:3000"]
+        A1["🔴 app1 10.10.10.11:4000"]
+        A2["🟢 app2 10.10.10.12:4000"]
+        A3["🔵 app3 10.10.10.13:4000"]
         E1["tcp-echo-1 10.10.10.21:7000"]
         E2["tcp-echo-2 10.10.10.22:7000"]
         E3["tcp-echo-3 10.10.10.23:7000"]
@@ -374,7 +376,7 @@ flowchart LR
     L7 --> A1 & A2 & A3
     L4H --> A1 & A2 & A3
     L4E --> E1 & E2 & E3
-    Browser -. "direct, no balancer<br/>:3001 :3002 :3003" .-> A1 & A2 & A3
+    Browser -. "direct, no balancer<br/>:4001 :4002 :4003" .-> A1 & A2 & A3
 ```
 
 The **same three Express apps** sit behind **both** the L7 port and the L4
@@ -415,7 +417,7 @@ Files:
 - **Node.js 20+** on your computer, to run the scripts in `scripts/`. Check with
   `node -v`. (The servers run inside Docker; you don't need Node for them.)
 - `curl` (already installed on macOS, Linux and Windows 10+).
-- Free ports: 8080, 9090, 9091, 9092, 9000, 3001–3003, 7001–7003.
+- Free ports: 8080, 9090, 9091, 9092, 9000, 4001–4003, 7001–7003.
 
 ### Quick start
 
@@ -449,7 +451,7 @@ Useful if you just want to poke at the Express app or the echo server:
 # Express app (needs one npm install)
 cd backend
 npm install
-SERVER_NAME=app1 PORT=3001 node server.js      # or: npm run app1
+SERVER_NAME=app1 PORT=4001 node server.js      # or: npm run app1
 # in other terminals:  npm run app2   /   npm run app3
 
 # TCP echo server (no install needed)
@@ -457,13 +459,13 @@ SERVER_NAME=tcp-echo-1 PORT=7001 node tcp-echo/server.js
 node scripts/tcp-client.js 7001 3
 ```
 
-> Windows PowerShell: `$env:SERVER_NAME="app1"; $env:PORT="3001"; node server.js`
+> Windows PowerShell: `$env:SERVER_NAME="app1"; $env:PORT="4001"; node server.js`
 
 > Stop the Docker lab first (`docker compose down`), or use other port numbers,
-> because Docker already publishes 3001–3003 and 7001–7003.
+> because Docker already publishes 4001–4003 and 7001–7003.
 
 To put a **locally installed nginx** in front of them, change the upstream
-addresses in `nginx/*.conf` from `app1:3000` to `127.0.0.1:3001` (and so on),
+addresses in `nginx/*.conf` from `app1:4000` to `127.0.0.1:4001` (and so on),
 fix the two `include` paths in `nginx.conf`, and start nginx with
 `nginx -c /full/path/to/nginx/nginx.conf`. The Docker setup avoids all of
 this, which is why it's the recommended way.
@@ -477,11 +479,11 @@ this, which is why it's the recommended way.
 | Port | Layer | Goes to | Algorithm | Notes |
 |---|---|---|---|---|
 | **8080** | **L7** (http) | app1–3 | depends on path (below) | Adds X-Forwarded-For etc.; response header `X-Upstream-Server` |
-| **9090** | **L4** (stream) | app1–3 :3000 | round robin | HTTP works, but no added headers, no path routing |
-| **9091** | **L4** (stream) | app1–3 :3000 | least_conn | |
-| **9092** | **L4** (stream) | app1–3 :3000 | hash $remote_addr consistent | |
+| **9090** | **L4** (stream) | app1–3 :4000 | round robin | HTTP works, but no added headers, no path routing |
+| **9091** | **L4** (stream) | app1–3 :4000 | least_conn | |
+| **9092** | **L4** (stream) | app1–3 :4000 | hash $remote_addr consistent | |
 | **9000** | **L4** (stream) | tcp-echo-1–3 :7000 | round robin | Non-HTTP protocol |
-| 3001 / 3002 / 3003 | — | app1 / app2 / app3 directly | — | Bypasses nginx (baseline, and for `/crash`) |
+| 4001 / 4002 / 4003 | — | app1 / app2 / app3 directly | — | Bypasses nginx (baseline, and for `/crash`) |
 | 7001 / 7002 / 7003 | — | tcp-echo-1 / 2 / 3 directly | — | Bypasses nginx |
 
 ### URL prefixes on the L7 port (8080)
@@ -528,7 +530,7 @@ Every response also carries an `X-Served-By: appN` header.
 | `Pool overlaps with other one on this host` | Another Docker network already uses `10.10.10.0/24`. Change the subnet **and** all `ipv4_address` values in `docker-compose.yml` (for example to `10.20.30.x`). |
 | `curl: (52) Empty reply` / `connection refused` right after start | Wait a few seconds, then check `docker compose ps`; all 7 containers should be "Up". |
 | A server shows `Exited (1)` | You (or a student 😉) crashed it. `docker compose start app1` |
-| **`host not found in upstream "app2:3000"`** when reloading nginx | A backend container is **stopped**, so its name doesn't resolve and nginx refuses the new config (it keeps running the old one). Start the backend, then reload. |
+| **`host not found in upstream "app2:4000"`** when reloading nginx | A backend container is **stopped**, so its name doesn't resolve and nginx refuses the new config (it keeps running the old one). Start the backend, then reload. |
 | Edited an nginx file, nothing changed | Reload: `docker compose exec nginx nginx -s reload`. Test first: `docker compose exec nginx nginx -t` |
 | nginx container exited at startup | Look at why: `docker compose logs nginx`. Usually a config typo; the message names the file and line. |
 | Edited `backend/server.js`, nothing changed | The code is baked into the image: `docker compose up --build -d` |

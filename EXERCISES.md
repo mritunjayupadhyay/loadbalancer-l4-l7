@@ -63,7 +63,7 @@ app2         10   33.3%        2  ███████████████�
 app3         10   33.3%        3  ████████████████████████████████████████
 --------------------------------------------------------------------
 total time: 0.07 s
-X-Upstream-Server values seen: 10.10.10.11:3000  |  10.10.10.12:3000  |  10.10.10.13:3000
+X-Upstream-Server values seen: 10.10.10.11:4000  |  10.10.10.12:4000  |  10.10.10.13:4000
 ```
 
 Also try one request by hand and look at the headers:
@@ -77,7 +77,7 @@ HTTP/1.1 200 OK
 Server: nginx/1.28.3
 ...
 X-Served-By: app2
-X-Upstream-Server: 10.10.10.12:3000
+X-Upstream-Server: 10.10.10.12:4000
 ```
 
 **Why?** With no algorithm directive, an nginx `upstream` uses round robin: it
@@ -115,7 +115,7 @@ app2          6   20.0%        2  █████████████
 app3          6   20.0%        1  █████████████
 ```
 
-**Why?** `server app1:3000 weight=3;` gives app1 3 "tickets" out of 5
+**Why?** `server app1:4000 weight=3;` gives app1 3 "tickets" out of 5
 (3 + 1 + 1). nginx uses *smooth* weighted round robin, which spreads app1's turns
 out (`app1 app2 app1 app3 app1`) so app1 never receives a burst of 3 in a row.
 Use weights when servers have different capacity, or to send, say, 10% of
@@ -286,11 +286,11 @@ apps, and stateless apps don't need it.
 **Goal:** kill app2 and watch nginx route around it with **zero errors**, then
 bring it back.
 
-**Step 1: crash app2.** Send the crash **directly** to app2's own port (3002).
+**Step 1: crash app2.** Send the crash **directly** to app2's own port (4002).
 Through nginx you couldn't choose which server gets it.
 
 ```bash
-curl -X POST http://localhost:3002/crash
+curl -X POST http://localhost:4002/crash
 docker compose ps -a        # lab-app2 now shows "Exited (1)"
 ```
 
@@ -316,12 +316,12 @@ app1          6   50.0%        4  ███████████████�
 app3          6   50.0%      172  ████████████████████████████████████████
 --------------------------------------------------------------------
 total time: 1.05 s
-X-Upstream-Server values seen: 10.10.10.11:3000  |  10.10.10.12:3000, 10.10.10.13:3000  |  10.10.10.13:3000
+X-Upstream-Server values seen: 10.10.10.11:4000  |  10.10.10.12:4000, 10.10.10.13:4000  |  10.10.10.13:4000
 ```
 
 **Observe:**
 - **No errors.** All 12 requests succeeded.
-- One `X-Upstream-Server` value is `10.10.10.12:3000, 10.10.10.13:3000`: nginx
+- One `X-Upstream-Server` value is `10.10.10.12:4000, 10.10.10.13:4000`: nginx
   **tried app2, failed, and retried on app3** within the same request.
 - That one request took ~1 s (the `proxy_connect_timeout`). That's why app3's
   *average* is higher. After that, app2 is skipped entirely.
@@ -329,13 +329,13 @@ X-Upstream-Server values seen: 10.10.10.11:3000  |  10.10.10.12:3000, 10.10.10.1
 **Step 3: read nginx's side of the story:**
 
 ```bash
-docker compose logs nginx | grep -E 'warn|error|10.10.10.12:3000, '
+docker compose logs nginx | grep -E 'warn|error|10.10.10.12:4000, '
 ```
 
 ```
-[warn] ... upstream server temporarily disabled while connecting to upstream ... upstream: "http://10.10.10.12:3000/"
-[error] ... upstream timed out (110: Operation timed out) while connecting to upstream ... upstream: "http://10.10.10.12:3000/"
-L7 192.168.65.1 "GET /rr/ HTTP/1.1" status=200 upstream=10.10.10.12:3000, 10.10.10.13:3000 upstream_status=504, 200 time=1.006, 0.003s
+[warn] ... upstream server temporarily disabled while connecting to upstream ... upstream: "http://10.10.10.12:4000/"
+[error] ... upstream timed out (110: Operation timed out) while connecting to upstream ... upstream: "http://10.10.10.12:4000/"
+L7 192.168.65.1 "GET /rr/ HTTP/1.1" status=200 upstream=10.10.10.12:4000, 10.10.10.13:4000 upstream_status=504, 200 time=1.006, 0.003s
 ```
 
 **Step 4: the same at Layer 4:**
@@ -378,7 +378,7 @@ The container is configured with `restart: "no"` so it stays dead until you
 start it, which lets you see the failover.
 
 > ⚠️ Don't run `nginx -s reload` while a backend is stopped. nginx will refuse
-> the reload with `host not found in upstream "app2:3000"` (Docker removes the
+> the reload with `host not found in upstream "app2:4000"` (Docker removes the
 > DNS name of a stopped container). nginx keeps running with its old config, so
 > nothing breaks; start the backend and reload again.
 
@@ -540,7 +540,7 @@ Content-Length: 710                           ETag: W/"24a-VIv5165nd+wK51GFIQYvg
 Connection: keep-alive                        Date: Sat, 31 Oct 2026 11:00:23 GMT
 X-Served-By: app2                             Connection: keep-alive
 ETag: W/"2c6-MfFl4duYndjMTVNRBb/FSIWnyJw"     Keep-Alive: timeout=5
-X-Upstream-Server: 10.10.10.12:3000
+X-Upstream-Server: 10.10.10.12:4000
 ```
 
 **Observe:**
@@ -659,7 +659,7 @@ bytes (it doesn't care what they are) to an **Express** server, and *Express*
 rejected them. The nginx log shows a backend was used and the session was "fine":
 
 ```
-L4 192.168.65.1 -> :9090 upstream=10.10.10.11:3000 status=200 bytes_in=25 bytes_out=47 session=0.001s
+L4 192.168.65.1 -> :9090 upstream=10.10.10.11:4000 status=200 bytes_in=25 bytes_out=47 session=0.001s
 ```
 
 **Why?** L7 = "I only speak HTTP; I check and understand every request." L4 =
@@ -681,9 +681,9 @@ docker compose exec nginx nginx -s reload    # apply
 ### 10.1 Add a fourth server
 
 1. In `docker-compose.yml`, copy the `app3` block to `app4` with
-   `SERVER_NAME: app4`, `container_name: lab-app4`, `ports: ["3004:3000"]` and
+   `SERVER_NAME: app4`, `container_name: lab-app4`, `ports: ["3004:4000"]` and
    `ipv4_address: 10.10.10.14`.
-2. Add `server app4:3000 max_fails=1 fail_timeout=10s;` to `upstream backend_rr`
+2. Add `server app4:4000 max_fails=1 fail_timeout=10s;` to `upstream backend_rr`
    in `l7-http.conf`.
 3. Run `docker compose up -d` (this starts app4), then
    `docker compose exec nginx nginx -s reload`.

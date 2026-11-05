@@ -17,7 +17,7 @@ const os = require('os');
 // differently-named instances. Docker Compose sets these per container.
 // -----------------------------------------------------------------------------
 const SERVER_NAME = process.env.SERVER_NAME || 'app-unnamed';
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 4000);
 
 // A colour/emoji per server so students can tell them apart at a glance in
 // both the JSON responses and the terminal logs.

@@ -9,9 +9,9 @@
   },
   "scripts": {
     "start": "node server.js",
-    "app1": "SERVER_NAME=app1 PORT=3001 node server.js",
-    "app2": "SERVER_NAME=app2 PORT=3002 node server.js",
-    "app3": "SERVER_NAME=app3 PORT=3003 node server.js"
+    "app1": "SERVER_NAME=app1 PORT=4001 node server.js",
+    "app2": "SERVER_NAME=app2 PORT=4002 node server.js",
+    "app3": "SERVER_NAME=app3 PORT=4003 node server.js"
   },
   "dependencies": {
     "express": "^5.1.0"

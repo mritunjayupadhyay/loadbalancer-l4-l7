@@ -20,9 +20,9 @@ RUN npm ci --omit=dev
 # Now copy the application code.
 COPY server.js ./
 
-# Documentation only: tells readers the app listens on 3000 inside the
+# Documentation only: tells readers the app listens on 4000 inside the
 # container. (Publishing the port to your laptop happens in docker-compose.yml.)
-EXPOSE 3000
+EXPOSE 4000
 
 # Run node directly (not "npm start") so Node receives stop signals from
 # Docker directly and shuts down quickly.

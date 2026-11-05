@@ -159,7 +159,7 @@ async function main() {
   console.log(`total time: ${(elapsed / 1000).toFixed(2)} s`);
 
   // If nginx (L7) told us backend addresses, show them — this makes retries
-  // visible, e.g. "10.10.10.11:3000, 10.10.10.12:3000" means the first server
+  // visible, e.g. "10.10.10.11:4000, 10.10.10.12:4000" means the first server
   // failed and nginx retried on the second.
   const seen = new Set(results.map((r) => r.upstream).filter(Boolean));
   if (seen.size) {
